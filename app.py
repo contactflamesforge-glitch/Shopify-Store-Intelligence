@@ -5,7 +5,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from prospecting import (
     discover_stores, DISCOVERY_DIAGNOSTICS, audit_store, save_prospect,
-    load_prospects, export_csv, update_prospect,
+    load_prospects, export_csv, update_prospect, find_public_emails,
 )
 from outreach import generate_draft
 
@@ -83,6 +83,8 @@ with tabs[1]:
         selected_market = "" if market == "Any country" else market
         with st.spinner(f"Searching for up to {limit} verified Shopify storefronts…"):
             st.session_state["discovered"] = discover_stores(selected_niche, selected_market, limit)
+            for candidate in st.session_state["discovered"]:
+                candidate["emails"] = find_public_emails(candidate["url"])
         count = len(st.session_state["discovered"])
         if count >= limit: st.success(f"Found {count} Shopify storefront candidates.")
         elif count: st.warning(f"Found {count} verified Shopify stores, not {limit}. No unverified results were added to pad the list.")
@@ -94,6 +96,7 @@ with tabs[1]:
         with st.container(border=True):
             x,y = st.columns([5,1])
             x.markdown(f"**{item['domain']}**  \n{item['url']}  \n{item.get('snippet','')}")
+            x.markdown("**Public email:** " + (", ".join(item.get("emails", [])) or "Not found on public pages"))
             if y.button("Audit & save", key="discover_"+item["domain"]):
                 try:
                     with st.spinner("Auditing public storefront…"):
