@@ -17,7 +17,9 @@ DB_PATH = os.getenv("SQLITE_PATH", os.path.join("data", "prospects.db"))
 DISCOVERY_DIAGNOSTICS = []
 BLOCKED = ("duckduckgo.com", "bing.com", "google.com", "facebook.com", "instagram.com",
            "tiktok.com", "youtube.com", "pinterest.com", "reddit.com", "wikipedia.org",
-           "amazon.com", "etsy.com", "aliexpress.com")
+           "amazon.com", "etsy.com", "aliexpress.com", "findniche.com", "gempages.net",
+           "sellercenter.io", "storeinspect.com", "eachspy.com", "storeleads.app",
+           "builtwith.com", "similarweb.com", "commerceinspector.com", "bluecreativeus.com", "vtlabs.org")
 
 
 def clean_url(url):
@@ -119,18 +121,36 @@ def _bing(query, limit):
     return found
 
 
+def _verify_shopify_store(url):
+    """Check public homepage HTML for Shopify and real product/cart evidence."""
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=12, allow_redirects=True)
+        if response.status_code >= 400 or len(response.content) > 4_000_000:
+            return False
+        html = response.text.lower()
+        soup = BeautifulSoup(response.text, "html.parser")
+        markers = ("cdn.shopify.com", "shopify.theme", "shopify-section",
+                   "myshopify.com", "shopify-payment-button", "shopify-buy")
+        platform = any(marker in html for marker in markers)
+        commerce = bool(soup.select('a[href*="/products/"]')) or any(
+            token in html for token in ("/cart", "cart-drawer", "cart-notification"))
+        return platform and commerce
+    except requests.RequestException:
+        return False
+
+
 def discover_stores(niche, market="", limit=10):
     DISCOVERY_DIAGNOSTICS.clear()
     niche, market = (niche or "").strip(), (market or "").strip()
-    if not niche:
-        return []
     limit = max(1, min(int(limit), 50))
     location = f" in {market}" if market else ""
+    category = niche if niche else "online retail"
     queries = [
-        f"{niche} Shopify store{location}",
-        f"Shopify {niche} online store{location}",
-        f"site:myshopify.com {niche}{location}",
-        f"{niche} ecommerce brand shop{location}",
+        f"{category} Shopify store{location} official online shop",
+        f"{category} brand shop Shopify{location} buy online",
+        f"Shopify {category} store{location} shop now",
+        f"site:myshopify.com {category}{location}",
+        f"{category} independent ecommerce store powered by Shopify{location}",
     ]
     providers = []
     if os.getenv("EXA_API_KEY"):
@@ -138,11 +158,11 @@ def discover_stores(niche, market="", limit=10):
     if os.getenv("BRAVE_SEARCH_API_KEY"):
         providers.append(("Brave Search", _brave_search))
     providers.extend([("DuckDuckGo", _ddg), ("Bing RSS", _bing)])
-    results, seen = [], set()
+    candidates, seen = [], set()
     for query in queries:
         for name, searcher in providers:
             try:
-                batch = searcher(query, limit)
+                batch = searcher(query, min(limit * 3, 50))
                 DISCOVERY_DIAGNOSTICS.append(f"{name}: {len(batch)} raw results for “{query}”.")
                 for item in batch:
                     url = _result_url(item.get("url", ""))
@@ -152,17 +172,26 @@ def discover_stores(niche, market="", limit=10):
                     if domain in seen:
                         continue
                     seen.add(domain)
-                    results.append({"domain": domain, "url": url, "snippet": item.get("snippet", "")})
-                    if len(results) >= limit:
-                        return results
+                    candidates.append({"domain": domain, "url": url, "snippet": item.get("snippet", "")})
             except requests.RequestException as exc:
                 DISCOVERY_DIAGNOSTICS.append(f"{name}: request failed ({type(exc).__name__}: {str(exc)[:140]}).")
             except (ValueError, KeyError, TypeError) as exc:
                 DISCOVERY_DIAGNOSTICS.append(f"{name}: could not parse response ({type(exc).__name__}).")
-            time.sleep(0.15)
-    if not providers or not any("raw results" in line for line in DISCOVERY_DIAGNOSTICS):
-        DISCOVERY_DIAGNOSTICS.append("No search provider returned results. Configure EXA_API_KEY or BRAVE_SEARCH_API_KEY in Streamlit Secrets for more reliable discovery.")
-    return results
+            time.sleep(0.12)
+    verified = []
+    for candidate in candidates:
+        if _verify_shopify_store(candidate["url"]):
+            verified.append(candidate)
+            DISCOVERY_DIAGNOSTICS.append(f"Verified Shopify storefront: {candidate['domain']}.")
+            if len(verified) >= limit:
+                break
+        else:
+            DISCOVERY_DIAGNOSTICS.append(f"Skipped non-store or unverified result: {candidate['domain']}.")
+    if not verified:
+        DISCOVERY_DIAGNOSTICS.append("No candidates passed public Shopify verification. Results are not padded with directories or case studies.")
+    elif len(verified) < limit:
+        DISCOVERY_DIAGNOSTICS.append(f"Only {len(verified)} of {limit} requested stores passed verification.")
+    return verified
 
 
 def _has_link(soup, words):
