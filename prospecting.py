@@ -1,11 +1,12 @@
-import re, json, os, csv, io
+import re, json, os, csv, io, xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 import requests
 from bs4 import BeautifulSoup
 
-HEADERS={"User-Agent":"Mozilla/5.0 (compatible; StoreIntelligenceAudit/1.0)"}
+HEADERS={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"}
 DB=os.path.join("data","prospects.json")
+BLOCKED=("duckduckgo.com","bing.com","google.com","facebook.com","instagram.com","tiktok.com","youtube.com","pinterest.com","reddit.com","wikipedia.org","amazon.com","etsy.com")
 
 def clean_url(url):
     url=url.strip()
@@ -13,24 +14,55 @@ def clean_url(url):
     if not urlparse(url).netloc: raise ValueError("Enter a valid store URL.")
     return url
 
+def _result_url(href):
+    if not href: return ""
+    href=unquote(href); p=urlparse(href)
+    if "uddg" in parse_qs(p.query):
+        href=parse_qs(p.query)["uddg"][0]; p=urlparse(href)
+    if p.scheme not in ("http","https") or not p.netloc: return ""
+    domain=p.netloc.lower().removeprefix("www.").split(":")[0]
+    if any(domain == d or domain.endswith("."+d) for d in BLOCKED): return ""
+    if not re.match(r"^[a-z0-9.-]+\.[a-z]{2,}$",domain): return ""
+    return "https://"+domain
+
+def _ddg(query, limit):
+    r=requests.get("https://html.duckduckgo.com/html/",params={"q":query},headers=HEADERS,timeout=18)
+    r.raise_for_status(); soup=BeautifulSoup(r.text,"html.parser")
+    links=soup.select("a.result__a, a[data-testid='result-title-a']")
+    if not links: links=soup.select(".result a[href], .web-result a[href]")
+    out=[]
+    for a in links:
+        url=_result_url(a.get("href",""))
+        if url:
+            parent=a.find_parent(class_="result") or a.parent
+            out.append({"url":url,"snippet":parent.get_text(" ",strip=True)[:350] if parent else ""})
+        if len(out)>=limit: break
+    return out
+
+def _bing(query, limit):
+    r=requests.get("https://www.bing.com/search",params={"q":query,"format":"rss"},headers=HEADERS,timeout=18)
+    r.raise_for_status(); root=ET.fromstring(r.text); out=[]
+    for item in root.findall(".//item"):
+        url=_result_url(item.findtext("link",""))
+        if url: out.append({"url":url,"snippet":item.findtext("description","")[:350]})
+        if len(out)>=limit: break
+    return out
+
 def discover_stores(niche, market="", limit=10):
-    query=f'"myshopify.com" {niche} {market} store'
-    try:
-        response=requests.get("https://html.duckduckgo.com/html/",params={"q":query},headers=HEADERS,timeout=20)
-        response.raise_for_status()
-        soup=BeautifulSoup(response.text,"html.parser")
-        results=[]; seen=set()
-        for link in soup.select("a.result__a"):
-            href=link.get("href","")
-            if "uddg=" in href: href=parse_qs(urlparse(href).query).get("uddg",[href])[0]
-            domain=urlparse(href).netloc.lower().removeprefix("www.")
-            if not domain or domain in seen or any(x in domain for x in ["duckduckgo.com","facebook.com","instagram.com"]): continue
-            seen.add(domain); parent=link.find_parent(class_="result")
-            snippet=parent.select_one(".result__snippet").get_text(" ",strip=True) if parent and parent.select_one(".result__snippet") else ""
-            results.append({"domain":domain,"url":"https://"+domain,"snippet":snippet})
-            if len(results)>=limit: break
-        return results
-    except requests.RequestException: return []
+    niche=niche.strip(); market=market.strip()
+    if not niche: return []
+    queries=[f"{niche} Shopify store {market}".strip(),f"site:myshopify.com {niche} {market}".strip(),f"{niche} online shop {market}".strip()]
+    results=[]; seen=set()
+    for query in queries:
+        for searcher in (_ddg,_bing):
+            try: batch=searcher(query,limit)
+            except (requests.RequestException,ET.ParseError,ValueError): continue
+            for item in batch:
+                domain=urlparse(item["url"]).netloc.lower().removeprefix("www.")
+                if domain in seen: continue
+                seen.add(domain); results.append({"domain":domain,"url":item["url"],"snippet":item.get("snippet","")})
+                if len(results)>=int(limit): return results
+    return results
 
 def audit_store(url):
     response=requests.get(clean_url(url),headers=HEADERS,timeout=20,allow_redirects=True)
@@ -45,17 +77,13 @@ def audit_store(url):
     else: opportunities.append("Shopify platform could not be verified")
     if products: signals.append(f"{products} distinct product links found")
     else: opportunities.append("No product links detected on scanned homepage"); score+=8
-    checks=[(("shipping","delivery"),"Shipping or delivery information not visible",10),
-            (("return policy","returns","refund policy"),"Returns/refund information not visible",8),
-            (("contact us","contact"),"Contact route not obvious",8),
-            (("review","reviews","testimonial"),"Reviews/testimonials not visible",7)]
+    checks=[(("shipping","delivery"),"Shipping or delivery information not visible",10),(("return policy","returns","refund policy"),"Returns/refund information not visible",8),(("contact us","contact"),"Contact route not obvious",8),(("review","reviews","testimonial"),"Reviews/testimonials not visible",7)]
     for terms,label,points in checks:
         if not any(term in text for term in terms): opportunities.append(label+" on scanned page"); score+=points
     if emails: signals.append("Public email address detected")
     else: opportunities.append("No public business email detected on scanned page")
     if any(x in text for x in ["instagram","tiktok","facebook"]): signals.append("Social channel links or mentions detected")
-    return {"domain":domain,"url":response.url,"is_shopify":shopify,"score":min(100,score),"product_count":products,
-            "emails":emails,"signals":signals,"opportunities":opportunities,"audited_at":datetime.now(timezone.utc).isoformat()}
+    return {"domain":domain,"url":response.url,"is_shopify":shopify,"score":min(100,score),"product_count":products,"emails":emails,"signals":signals,"opportunities":opportunities,"audited_at":datetime.now(timezone.utc).isoformat()}
 
 def load_prospects():
     try:
