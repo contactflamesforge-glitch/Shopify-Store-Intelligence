@@ -1,6 +1,6 @@
-streamlit>=1.36.0
+streamlit>=1.40.0
 requests>=2.32.0
 beautifulsoup4>=4.12.3
 pandas>=2.2.2
 python-dotenv>=1.0.1
-google-generativeai>=0.8.3
+google-genai>=1.0.0
