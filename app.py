@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from prospecting import discover_stores, audit_store, save_prospect, load_prospects, export_csv
+from prospecting import discover_stores, DISCOVERY_DIAGNOSTICS, audit_store, save_prospect, load_prospects, export_csv
 from outreach import generate_draft
 
 load_dotenv()
@@ -30,6 +30,12 @@ with tabs[0]:
   else:
    with st.spinner("Searching public web results…"): st.session_state["discovered"]=discover_stores(niche,market,limit)
    st.success(f"Found {len(st.session_state['discovered'])} candidates.")
+   if not st.session_state["discovered"]:
+    st.warning("The search providers returned no usable store links. Open the diagnostic details below to identify the cause.")
+    with st.expander("Search diagnostics", expanded=True):
+     if DISCOVERY_DIAGNOSTICS:
+      for line in DISCOVERY_DIAGNOSTICS: st.write("• "+line)
+     else: st.write("No provider response details were recorded.")
  for item in st.session_state.get("discovered",[]):
   with st.container(border=True):
    a,b=st.columns([4,1]); a.markdown(f"**{item['domain']}**  \n{item['url']}  \n{item.get('snippet','')}")
