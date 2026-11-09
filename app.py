@@ -32,6 +32,9 @@ section[data-testid="stSidebar"]{background:#0b1220}
 """, unsafe_allow_html=True)
 
 STATUSES = ["New", "Audited", "Qualified", "Contacted", "Replied", "Interested", "Client", "Not Interested"]
+COUNTRIES = ["Any country"] + sorted(["Afghanistan","Albania","Algeria","Argentina","Australia","Austria","Bangladesh","Belgium","Benin","Brazil","Bulgaria","Cambodia","Cameroon","Canada","Chile","China","Colombia","Croatia","Cyprus","Czechia","Denmark","Egypt","Estonia","Ethiopia","Finland","France","Georgia","Germany","Ghana","Greece","Hungary","Iceland","India","Indonesia","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kenya","Malaysia","Mexico","Morocco","Nepal","Netherlands","New Zealand","Nigeria","Norway","Pakistan","Peru","Philippines","Poland","Portugal","Qatar","Romania","Rwanda","Saudi Arabia","Senegal","Serbia","Singapore","South Africa","South Korea","Spain","Sri Lanka","Sweden","Switzerland","Taiwan","Tanzania","Thailand","Turkey","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Vietnam","Zambia","Zimbabwe"])
+NICHES = ["All niches","Apparel & Clothing","Accessories","Shoes & Footwear","Jewelry & Watches","Beauty & Skincare","Haircare","Makeup & Cosmetics","Health & Wellness","Fitness & Sports Nutrition","Supplements","Food & Beverage","Coffee & Tea","Pet Supplies","Baby & Kids","Toys & Games","Home & Living","Furniture","Home Decor","Kitchen & Dining","Garden & Outdoor","Electronics","Consumer Technology","Phones & Accessories","Computers & Gaming","Smart Home","Automotive","Travel & Luggage","Bags & Backpacks","Sports & Outdoors","Camping & Hiking","Arts & Crafts","Books & Stationery","Office Supplies","Hobbies & Collectibles","Personalised Gifts","Luxury Goods","Sustainable & Eco Products","Men's Fashion","Women's Fashion","Streetwear","Vintage & Resale","Wedding & Events","Industrial & B2B","Digital Products"]
+
 if "discovered" not in st.session_state: st.session_state["discovered"] = []
 if "last_audit" not in st.session_state: st.session_state["last_audit"] = None
 
@@ -69,20 +72,20 @@ with tabs[0]:
 
 with tabs[1]:
     st.subheader("Discover public storefront candidates")
-    left,right = st.columns([2,1])
-    niche = left.text_input("Niche / product category", placeholder="e.g. skincare, pet accessories, fitness")
-    market = right.text_input("Target market", placeholder="e.g. United States")
-    limit = st.select_slider("Maximum candidates", options=[5,10,20,30,50], value=10)
-    st.caption("Search results are unverified leads. Audit a store before treating it as a Shopify prospect.")
-    if st.button("🔍 Discover stores", type="primary", use_container_width=True):
-        if not niche.strip():
-            st.warning("Enter a niche first.")
-        else:
-            with st.spinner("Searching public web results across available providers…"):
-                st.session_state["discovered"] = discover_stores(niche, market, limit)
-            count = len(st.session_state["discovered"])
-            if count: st.success(f"Found {count} candidate websites.")
-            else: st.warning("No usable store links found. Check provider diagnostics below or configure a search API key.")
+    left,right = st.columns(2)
+    niche = left.selectbox("Shopify niche / product category", NICHES)
+    market = right.selectbox("Target country", COUNTRIES, index=COUNTRIES.index("United States"))
+    limit = st.select_slider("Number of Shopify stores to find", options=[5,10,20,30,50], value=10)
+    st.caption("Directories, agencies and case studies are filtered out. Only public Shopify storefront signals are shown.")
+    if st.button("🔍 Discover Shopify stores", type="primary", use_container_width=True):
+        selected_niche = "" if niche == "All niches" else niche
+        selected_market = "" if market == "Any country" else market
+        with st.spinner(f"Searching for up to {limit} verified Shopify storefronts…"):
+            st.session_state["discovered"] = discover_stores(selected_niche, selected_market, limit)
+        count = len(st.session_state["discovered"])
+        if count >= limit: st.success(f"Found {count} Shopify storefront candidates.")
+        elif count: st.warning(f"Found {count} verified Shopify stores, not {limit}. No unverified results were added to pad the list.")
+        else: st.warning("No verified Shopify stores found. Try another category or country.")
     if DISCOVERY_DIAGNOSTICS:
         with st.expander("Search diagnostics", expanded=not st.session_state["discovered"]):
             for line in DISCOVERY_DIAGNOSTICS: st.write("• " + line)
