@@ -31,11 +31,7 @@ with tabs[0]:
    with st.spinner("Searching public web results…"): st.session_state["discovered"]=discover_stores(niche,market,limit)
    st.success(f"Found {len(st.session_state['discovered'])} candidates.")
    if not st.session_state["discovered"]:
-    st.warning("The search providers returned no usable store links. Open the diagnostic details below to identify the cause.")
-    with st.expander("Search diagnostics", expanded=True):
-     if DISCOVERY_DIAGNOSTICS:
-      for line in DISCOVERY_DIAGNOSTICS: st.write("• "+line)
-     else: st.write("No provider response details were recorded.")
+     st.warning("No usable store links were found. Try a different niche or market.")
  for item in st.session_state.get("discovered",[]):
   with st.container(border=True):
    a,b=st.columns([4,1]); a.markdown(f"**{item['domain']}**  \n{item['url']}  \n{item.get('snippet','')}")
