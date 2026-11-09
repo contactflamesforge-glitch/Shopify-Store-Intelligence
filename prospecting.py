@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 
 HEADERS={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"}
 DB=os.path.join("data","prospects.json")
+DISCOVERY_DIAGNOSTICS=[]
 BLOCKED=("duckduckgo.com","bing.com","google.com","facebook.com","instagram.com","tiktok.com","youtube.com","pinterest.com","reddit.com","wikipedia.org","amazon.com","etsy.com")
 
 def clean_url(url):
@@ -49,14 +50,23 @@ def _bing(query, limit):
     return out
 
 def discover_stores(niche, market="", limit=10):
+    global DISCOVERY_DIAGNOSTICS
+    DISCOVERY_DIAGNOSTICS=[]
     niche=niche.strip(); market=market.strip()
     if not niche: return []
     queries=[f"{niche} Shopify store {market}".strip(),f"site:myshopify.com {niche} {market}".strip(),f"{niche} online shop {market}".strip()]
     results=[]; seen=set()
     for query in queries:
         for searcher in (_ddg,_bing):
-            try: batch=searcher(query,limit)
-            except (requests.RequestException,ET.ParseError,ValueError): continue
+            try:
+                batch=searcher(query,limit)
+                DISCOVERY_DIAGNOSTICS.append(f"{searcher.__name__}: HTTP success; {len(batch)} links parsed for query: {query}")
+            except requests.RequestException as exc:
+                DISCOVERY_DIAGNOSTICS.append(f"{searcher.__name__}: network/HTTP error: {type(exc).__name__}: {str(exc)[:180]}")
+                continue
+            except (ET.ParseError,ValueError) as exc:
+                DISCOVERY_DIAGNOSTICS.append(f"{searcher.__name__}: response parsing error: {type(exc).__name__}: {str(exc)[:180]}")
+                continue
             for item in batch:
                 domain=urlparse(item["url"]).netloc.lower().removeprefix("www.")
                 if domain in seen: continue
