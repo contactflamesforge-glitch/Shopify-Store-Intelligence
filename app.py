@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import pycountry
 import streamlit as st
 from dotenv import load_dotenv
 from prospecting import (
@@ -32,7 +33,7 @@ section[data-testid="stSidebar"]{background:#0b1220}
 """, unsafe_allow_html=True)
 
 STATUSES = ["New", "Audited", "Qualified", "Contacted", "Replied", "Interested", "Client", "Not Interested"]
-COUNTRIES = ["Any country"] + sorted(["Afghanistan","Albania","Algeria","Argentina","Australia","Austria","Bangladesh","Belgium","Benin","Brazil","Bulgaria","Cambodia","Cameroon","Canada","Chile","China","Colombia","Croatia","Cyprus","Czechia","Denmark","Egypt","Estonia","Ethiopia","Finland","France","Georgia","Germany","Ghana","Greece","Hungary","Iceland","India","Indonesia","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kenya","Malaysia","Mexico","Morocco","Nepal","Netherlands","New Zealand","Nigeria","Norway","Pakistan","Peru","Philippines","Poland","Portugal","Qatar","Romania","Rwanda","Saudi Arabia","Senegal","Serbia","Singapore","South Africa","South Korea","Spain","Sri Lanka","Sweden","Switzerland","Taiwan","Tanzania","Thailand","Turkey","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Vietnam","Zambia","Zimbabwe"])
+COUNTRIES = ["Any country"] + sorted(country.name for country in pycountry.countries)
 NICHES = ["All niches","Apparel & Clothing","Accessories","Shoes & Footwear","Jewelry & Watches","Beauty & Skincare","Haircare","Makeup & Cosmetics","Health & Wellness","Fitness & Sports Nutrition","Supplements","Food & Beverage","Coffee & Tea","Pet Supplies","Baby & Kids","Toys & Games","Home & Living","Furniture","Home Decor","Kitchen & Dining","Garden & Outdoor","Electronics","Consumer Technology","Phones & Accessories","Computers & Gaming","Smart Home","Automotive","Travel & Luggage","Bags & Backpacks","Sports & Outdoors","Camping & Hiking","Arts & Crafts","Books & Stationery","Office Supplies","Hobbies & Collectibles","Personalised Gifts","Luxury Goods","Sustainable & Eco Products","Men's Fashion","Women's Fashion","Streetwear","Vintage & Resale","Wedding & Events","Industrial & B2B","Digital Products"]
 
 if "discovered" not in st.session_state: st.session_state["discovered"] = []
