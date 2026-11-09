@@ -239,7 +239,7 @@ def find_public_emails(url, max_pages=4):
             address = anchor.get("href", "").split(":", 1)[-1].split("?", 1)[0].strip()
             if address:
                 found.add(address)
-        found.update(re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", html, re.I))
+        found.update(re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", html, re.I))
     return sorted(email for email in found if not any(x in email.lower() for x in
         ("example.com", "sentry.io", "shopify.com", "wixpress.com", "cloudflare.com"))
         and len(email) <= 254)
