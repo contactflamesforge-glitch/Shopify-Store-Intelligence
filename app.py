@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from prospecting import discover_stores, DISCOVERY_DIAGNOSTICS, audit_store, save_prospect, load_prospects, export_csv
+from prospecting import discover_stores, audit_store, save_prospect, load_prospects, export_csv
 from outreach import generate_draft
 
 load_dotenv()
