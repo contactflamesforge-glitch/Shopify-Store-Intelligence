@@ -202,6 +202,49 @@ def _has_link(soup, words):
     return False
 
 
+def find_public_emails(url, max_pages=4):
+    """Find publicly displayed business contact emails on a storefront and its contact pages."""
+    target = clean_url(url)
+    try:
+        response = requests.get(target, headers=HEADERS, timeout=18, allow_redirects=True)
+        response.raise_for_status()
+    except requests.RequestException:
+        return []
+    base_host = (urlparse(response.url).hostname or "").lower().removeprefix("www.")
+    pages = [(response.url, response.text[:2_000_000])]
+    soup = BeautifulSoup(response.text, "html.parser")
+    contact_links = []
+    from urllib.parse import urljoin
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "").strip()
+        label = (anchor.get_text(" ", strip=True) + " " + href).lower()
+        if any(word in label for word in ("contact", "about", "support", "help", "customer service")):
+            page_url = urljoin(response.url, href)
+            parsed = urlparse(page_url)
+            host = (parsed.hostname or "").lower().removeprefix("www.")
+            if parsed.scheme in ("http", "https") and host == base_host and page_url not in [x[0] for x in pages + contact_links]:
+                contact_links.append((page_url, ""))
+    for page_url, _ in contact_links[:max(0, max_pages - 1)]:
+        try:
+            page = requests.get(page_url, headers=HEADERS, timeout=12, allow_redirects=True)
+            final_host = (urlparse(page.url).hostname or "").lower().removeprefix("www.")
+            if page.status_code < 400 and final_host == base_host:
+                pages.append((page.url, page.text[:2_000_000]))
+        except requests.RequestException:
+            continue
+    found = set()
+    for page_url, html in pages:
+        page_soup = BeautifulSoup(html, "html.parser")
+        for anchor in page_soup.select('a[href^="mailto:"]'):
+            address = anchor.get("href", "").split(":", 1)[-1].split("?", 1)[0].strip()
+            if address:
+                found.add(address)
+        found.update(re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", html, re.I))
+    return sorted(email for email in found if not any(x in email.lower() for x in
+        ("example.com", "sentry.io", "shopify.com", "wixpress.com", "cloudflare.com"))
+        and len(email) <= 254)
+
+
 def audit_store(url):
     target = clean_url(url)
     response = requests.get(target, headers=HEADERS, timeout=25, allow_redirects=True)
@@ -214,8 +257,7 @@ def audit_store(url):
     domain = urlparse(response.url).hostname.lower().removeprefix("www.")
     lower_html = html.lower()
     shopify = any(token in lower_html for token in ("cdn.shopify.com", "shopify.theme", "myshopify.com", "shopify-section"))
-    emails = sorted(set(re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", html, re.I)))
-    emails = [email for email in emails if not any(x in email.lower() for x in ("example.com", "sentry.io", "shopify.com"))]
+    emails = find_public_emails(response.url)
     products = len({a.get("href", "").split("?")[0] for a in soup.select('a[href*="/products/"]') if a.get("href")})
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
     description = ""
