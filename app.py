@@ -9,6 +9,14 @@ from prospecting import (
 from outreach import generate_draft
 
 load_dotenv()
+# Streamlit Community Cloud secrets are not automatically environment variables.
+for secret_name in ("EXA_API_KEY", "BRAVE_SEARCH_API_KEY", "GEMINI_API_KEY", "GEMINI_MODEL", "SQLITE_PATH"):
+    try:
+        if secret_name in st.secrets and not os.getenv(secret_name):
+            os.environ[secret_name] = str(st.secrets[secret_name])
+    except Exception:
+        pass
+
 st.set_page_config(page_title="Shopify Store Intelligence", page_icon="🛍️", layout="wide")
 st.markdown("""
 <style>
