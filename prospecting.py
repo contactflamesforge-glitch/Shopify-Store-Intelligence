@@ -50,8 +50,7 @@ def _bing(query, limit):
     return out
 
 def discover_stores(niche, market="", limit=10):
-    global DISCOVERY_DIAGNOSTICS
-    DISCOVERY_DIAGNOSTICS=[]
+    DISCOVERY_DIAGNOSTICS.clear()
     niche=niche.strip(); market=market.strip()
     if not niche: return []
     queries=[f"{niche} Shopify store {market}".strip(),f"site:myshopify.com {niche} {market}".strip(),f"{niche} online shop {market}".strip()]
